@@ -88,9 +88,9 @@ end
 bc_x = round(bc_x / cnt);
 bc_y = round(bc_y / cnt);
 
-figure;
-imshow(back_crop);
-rectangle('Position', [bc_x bc_y 1 1], 'LineWidth',2, 'EdgeColor','b');
+%figure;
+%imshow(back_crop);
+%rectangle('Position', [bc_x bc_y 1 1], 'LineWidth',2, 'EdgeColor','b');
 
 [x,y] = size(I_crop);
 for i = 1:x
@@ -101,11 +101,16 @@ for i = 1:x
     end
 end
 
-figure;
-
-imshow(back_crop);
+%figure;
+%imshow(back_crop);
 
 global regionMap;
+%{
+se = strel('disk',2);        
+I_crop = imerode(I_crop,se);
+figure;
+imshow(I_crop);
+%}
 regionMap = zeros(size(I_crop));
 label = 1;
 step = 8;
@@ -131,8 +136,24 @@ regionMap = uint8(regionMap);
 
 figure;
 imshow(regionMap);
-%imwrite(regionMap,'regionMap.jpg');
 
+centroids = [];
+for i = 1:255
+    k = find(regionMap==i);
+    if(~isempty(k))
+        binaryMap = regionMap;
+        binaryMap(binaryMap ~= i) = 0;
+        binaryMap(binaryMap == i) = 255;
+        binaryMap = im2bw(binaryMap,graythresh(binaryMap));
+        s = regionprops(binaryMap,'centroid');
+        centroids = [centroids ; cat(1, s.Centroid)];
+    end
+end
+
+imshow(regionMap)
+hold on
+plot(centroids(:,1),centroids(:,2), 'b*')
+hold off
 
 %{
 subplot(2,3,1);imshow(F);title('original');

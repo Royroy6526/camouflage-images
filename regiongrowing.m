@@ -16,7 +16,7 @@ while (listSize > 0)
 		if (m < 1 || m >= Ix) continue; end
 		if (n < 1 || n >= Iy) continue; end
 		
-		if (I(candidate(1,1),candidate(1,2)) == I(m,n) && regionMap(m,n) == 0)
+		if ( abs( double(I(x,y)) - double(I(m,n))) < 1 && regionMap(m,n) == 0)
 			newPoint = [m n];
 			isNew = 1;
 			for j = first:last
