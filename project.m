@@ -105,12 +105,6 @@ end
 %imshow(back_crop);
 
 global regionMap;
-%{
-se = strel('disk',2);        
-I_crop = imerode(I_crop,se);
-figure;
-imshow(I_crop);
-%}
 regionMap = zeros(size(I_crop));
 label = 1;
 step = 8;
@@ -134,13 +128,23 @@ maxValue = max(M);
 regionMap = round(regionMap / maxValue * 255);
 regionMap = uint8(regionMap);
 
-figure;
-imshow(regionMap);
-
 centroids = [];
 for i = 1:255
     k = find(regionMap==i);
-    if(~isempty(k))
+    [x,y] = size(k);
+    if(x < 100)
+        regionMap(regionMap == i) = 255;
+    end
+end
+   
+regionMap = imcomplement(imfill(imcomplement(regionMap),'holes'));
+figure;
+imshow(regionMap);
+
+for i = 1:255
+    k = find(regionMap==i);
+    [x,y] = size(k);
+    if(x ~= 0)
         binaryMap = regionMap;
         binaryMap(binaryMap ~= i) = 0;
         binaryMap(binaryMap == i) = 255;
