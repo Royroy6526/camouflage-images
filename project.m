@@ -33,10 +33,10 @@ valuesMin_f = [min(I(:)) thresh_f];
 quant8_f = imquantize(I,thresh_f,valuesMin_f);
 quant8_floodfill_f = imcomplement(imfill(imcomplement(quant8_f),'holes'));
 
-figure;
+
 I_crop = imcrop(quant8_floodfill_f, [left bot (right-left) (top-bot)]);
-%I_crop = imresize(I_crop, 0.5);
-imshow(I_crop);
+%figure;
+%imshow(I_crop);
 
 I_back = rgb2gray(imread('scn_1.bmp'));
 mask_back = rgb2gray(imread('scn_1(M).bmp'));
@@ -95,7 +95,7 @@ bc_y = round(bc_y / cnt);
 [x,y] = size(I_crop);
 for i = 1:x
     for j = 1:y
-        if I_crop(i,j) < 150
+        if I_crop(i,j) < 220
             back_crop((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = I_crop(i,j);
         end
     end
@@ -111,6 +111,7 @@ step = 8;
 [x,y] = size(I_crop);
 i = step; j = step;
 
+%對整張影像灑種子
 for i = step:x
     for j = step:y
 		if(I_crop(i,j) < 223 && regionMap(i,j) == 0)
@@ -125,24 +126,31 @@ end
 
 M = max(regionMap);
 maxValue = max(M);
-regionMap = round(regionMap / maxValue * 255);
-regionMap = uint8(regionMap);
 
-centroids = [];
-for i = 1:255
-    k = find(regionMap==i);
-    [x,y] = size(k);
-    if(x < 100)
-        regionMap(regionMap == i) = 255;
+centroids = [];             %對RegionGrowing完的結果做處理
+                            %100 pixel以下的Segment用隔壁的pixel Color取代
+for i = 1:maxValue     
+    [row,col] = find(regionMap == i);
+    [index_x,index_y] = size(row);
+    if(index_x > 0 && index_x < 100)
+        if(col(1)-1 < 1)
+            intensity = regionMap(row(index_x),col(index_x)+1);
+        else
+            intensity = regionMap(row(1),col(1)-1);
+        end
+        regionMap(regionMap == i) = intensity;
     end
 end
-   
-regionMap = imcomplement(imfill(imcomplement(regionMap),'holes'));
+
+M = max(regionMap);
+maxValue = max(M);
+regionMap = round(regionMap / maxValue * 255);
+regionMap = uint8(regionMap);  %double 轉回 uint8
 figure;
 imshow(regionMap);
 
-for i = 1:255
-    k = find(regionMap==i);
+for i = 1:255                %對每個Segment做二值化，在對二值化影像找中心點座標
+    k = find(regionMap == i);
     [x,y] = size(k);
     if(x ~= 0)
         binaryMap = regionMap;
@@ -154,17 +162,8 @@ for i = 1:255
     end
 end
 
-imshow(regionMap)
+figure;
+imshow(regionMap);
 hold on
-plot(centroids(:,1),centroids(:,2), 'b*')
+plot(centroids(:,1),centroids(:,2), 'b*')     %Draw Segments Centroids 
 hold off
-
-%{
-subplot(2,3,1);imshow(F);title('original');
-subplot(2,3,2);imshow(quant8_f);title('quant8');
-subplot(2,3,3);imshow(quant8_floodfill_f);title('floodfill');
-
-subplot(2,3,4);imshow(I);title('original');
-subplot(2,3,5);imshow(quant8);title('quant8');
-subplot(2,3,6);imshow(quant8_floodfill);title('floodfill');
-%}
