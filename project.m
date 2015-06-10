@@ -169,9 +169,9 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
     binaryMap(binaryMap ~= i) = 0;
     binaryMap(binaryMap == i) = 255;
     binaryMap = im2bw(binaryMap,graythresh(binaryMap));
-    index = [i,0];
+    %index = [i,0];
     s = regionprops(binaryMap,'centroid');
-    centroids = [centroids ; cat(2, s.Centroid, index)];
+    centroids = [centroids ; cat(1, s.Centroid)];
 
     [row,col] = find(binaryMap == 1);
     boundary = bwboundaries(binaryMap);
@@ -206,11 +206,6 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
 end
 
 fore_regionMap = regionMap;
-figure;
-imshow(fore_regionMap);
-hold on
-plot(centroids(:,1),centroids(:,2), 'b*')     %Draw Segments Centroids 
-hold off
 %==========================================================================
 
 %==========================================================================
@@ -278,9 +273,9 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
     binaryMap(binaryMap ~= i) = 0;
     binaryMap(binaryMap == i) = 255;
     binaryMap = im2bw(binaryMap,graythresh(binaryMap));
-    index = [i,0];
+    %index = [i,0];
     s = regionprops(binaryMap,'centroid');
-    back_centroids = [back_centroids ; cat(2, s.Centroid, index)];
+    back_centroids = [back_centroids ; cat(1, s.Centroid)];
 
     [row,col] = find(binaryMap == 1);
     boundary = bwboundaries(binaryMap);
@@ -322,11 +317,30 @@ for k=1:1
    plot(b(:,2),b(:,1),'g','LineWidth',1);
 end
 %}
+figure;
+imshow(fore_regionMap);
+hold on
+plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids 
+hold off
+
+[x,y] = size(fore_regionMap);           %Combine Foreground and Background
+for i = 1:x
+    for j = 1:y
+        if fore_regionMap(i,j) > 0
+            regionMap((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = fore_regionMap(i,j);  %Substitute with I_crop(i,j)
+        end
+    end
+end
+
+%figure;
+%imshow(back_crop);
+%==========================================================================
 
 figure;
 imshow(regionMap);
 hold on
-plot(back_centroids(:,1),back_centroids(:,2), 'b*')     %Draw Segments Centroids 
+plot((bc_y-round(x/2))+centroids(:,1),(bc_x-round(y/2))+centroids(:,2), 'g*')     %Draw Segments Centroids 
+plot(back_centroids(:,1),back_centroids(:,2), 'r*')     %Draw Segments Centroids 
 hold off
 
 
