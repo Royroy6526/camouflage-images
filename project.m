@@ -316,13 +316,13 @@ for k=1:1
    b = boundary{k};
    plot(b(:,2),b(:,1),'g','LineWidth',1);
 end
-%}
+
 figure;
 imshow(fore_regionMap);
 hold on
 plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids 
 hold off
-
+%}
 [x,y] = size(fore_regionMap);           %Combine Foreground and Background
 for i = 1:x
     for j = 1:y
@@ -332,15 +332,44 @@ for i = 1:x
     end
 end
 
-%figure;
-%imshow(back_crop);
-%==========================================================================
-
 figure;
 imshow(regionMap);
 hold on
 plot((bc_y-round(x/2))+centroids(:,1),(bc_x-round(y/2))+centroids(:,2), 'g*')     %Draw Segments Centroids 
 plot(back_centroids(:,1),back_centroids(:,2), 'r*')     %Draw Segments Centroids 
 hold off
+%==========================================================================
+%===============Graph Construction=====================
+%=================Standout Edges=======================
+graph = java.util.ArrayList;        %Graph is a ArrayList(2D LinkedList)
+                                    %Index start from 1 (Calling Java ArrayList)
+                                    %Ex. graph.get(0);
+[x,y] = size(centroids);
+
+for i = 1:x     %(x is the number of Foregroun Segment)
+    index = find(neighbor_label(:,i)==1);
+    [index_x,index_y] = size(index);
+    if(index_x == 0)    %Discard isolated Segment
+        continue;
+    else
+        node = java.util.ArrayList;
+        for j = 1:index_x
+            node.add(uint8(index(j)));
+        end
+    end
+    graph.add(node);
+end
+%=================Immersion Edges=====================
+%idx is the index of Three Nearest Neighbor of centroids
+%dist is the distance
+[idx,dist] = knnsearch(back_centroids,centroids,'k',3);     %KNN(K=3)
+for i = 1:x
+    for j = 1:3
+        graph.get(i-1).add(uint8(idx(i,j)));
+    end
+end
+%==========================================================================
+
+
 
 
