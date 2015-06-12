@@ -344,9 +344,9 @@ end
 centroids(:,1) = (bc_y-round(x/2)) + centroids(:,1);
 centroids(:,2) = (bc_x-round(y/2)) + centroids(:,2);
 
-dim = size(idx);
 knn = 3;
 [idx,dist] = knnsearch(back_centroids,centroids,'k',knn,'distance','euclidean');     %KNN(K=3)
+dim = size(idx);
 for i = 1:dim(1)
     for j = 1:knn
         graph.get(i-1).add(uint8(idx(i,j)));
