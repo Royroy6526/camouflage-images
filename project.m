@@ -193,7 +193,7 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
                     break;
                 end
             end
-            if(seg_index > 1)
+            if(seg_index > 1)           %Holes in one segment only consider the first iteration (Assume only one segment in the hole)
                 break;
             end
         end
@@ -309,36 +309,6 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
     end
 end
 %==========================================================================
-%{
-imshow(regionMap);
-hold on;
-for k=1:1
-   b = boundary{k};
-   plot(b(:,2),b(:,1),'g','LineWidth',1);
-end
-
-figure;
-imshow(fore_regionMap);
-hold on
-plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids 
-hold off
-%}
-[x,y] = size(fore_regionMap);           %Combine Foreground and Background
-for i = 1:x
-    for j = 1:y
-        if fore_regionMap(i,j) > 0
-            regionMap((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = fore_regionMap(i,j);  %Substitute with I_crop(i,j)
-        end
-    end
-end
-
-figure;
-imshow(regionMap);
-hold on
-plot((bc_y-round(x/2))+centroids(:,1),(bc_x-round(y/2))+centroids(:,2), 'g*')     %Draw Segments Centroids 
-plot(back_centroids(:,1),back_centroids(:,2), 'r*')     %Draw Segments Centroids 
-hold off
-%==========================================================================
 %===============Graph Construction=====================
 %=================Standout Edges=======================
 graph = java.util.ArrayList;        %Graph is a ArrayList(2D LinkedList)
@@ -362,12 +332,62 @@ end
 %=================Immersion Edges=====================
 %idx is the index of Three Nearest Neighbor of centroids
 %dist is the distance
-[idx,dist] = knnsearch(back_centroids,centroids,'k',3);     %KNN(K=3)
+[x,y] = size(fore_regionMap);           %Combine Foreground and Background
 for i = 1:x
-    for j = 1:3
+    for j = 1:y
+        if fore_regionMap(i,j) > 0
+            regionMap((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = fore_regionMap(i,j);  %Substitute with I_crop(i,j)
+        end
+    end
+end
+
+centroids(:,1) = (bc_y-round(x/2)) + centroids(:,1);
+centroids(:,2) = (bc_x-round(y/2)) + centroids(:,2);
+
+dim = size(idx);
+knn = 3;
+[idx,dist] = knnsearch(back_centroids,centroids,'k',knn,'distance','euclidean');     %KNN(K=3)
+for i = 1:dim(1)
+    for j = 1:knn
         graph.get(i-1).add(uint8(idx(i,j)));
     end
 end
+%==========================================================================
+%draw graph
+%{
+imshow(regionMap);
+hold on;
+for k=1:1
+   b = boundary{k};
+   plot(b(:,2),b(:,1),'g','LineWidth',1);
+end
+
+figure;
+imshow(fore_regionMap);
+hold on
+plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids 
+hold off
+%}
+
+figure;
+imshow(regionMap);
+hold on
+plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids 
+plot(back_centroids(:,1),back_centroids(:,2), 'ro')     %Draw Segments Centroids 
+dim = size(centroids);
+
+
+for i = 1:dim(1)
+    length = graph.get(i-1).size();
+    for j = 1:length-knn          %foreground
+        plot([centroids(i,1),centroids(graph.get(i-1).get(j-1),1)], [centroids(i,2),centroids(graph.get(i-1).get(j-1),2)], 'g');
+    end
+    for k = 1:knn                 %background
+        plot([centroids(i,1),back_centroids(graph.get(i-1).get(j+k-1),1)], [centroids(i,2),back_centroids(graph.get(i-1).get(j+k-1),2)], 'r');
+    end
+end
+
+hold off
 %==========================================================================
 
 
