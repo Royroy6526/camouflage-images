@@ -35,6 +35,7 @@ I = imcomplement(imfill(imcomplement(I),'holes'));
 
 
 I_crop = imcrop(I, [left bot (right-left) (top-bot)]);
+luminance = I_crop;
 %figure;
 %imshow(I_crop);
 %==========================================================================
@@ -100,6 +101,7 @@ for i = 1:x
     end
 end
 
+luminance_back = back_crop;
 %figure;
 %imshow(back_crop);
 %==========================================================================
@@ -206,6 +208,14 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
 end
 
 fore_regionMap = regionMap;
+
+for i = 0:maxValue                     %Assign original luminance value to segmented foreground image
+    [row,col] = find(fore_regionMap == i);          %"luminance" means original luminance foreground image
+    luminance(fore_regionMap == i) = I_crop(row(1),col(1));
+end
+
+%figure;
+%imshow(luminance);
 %==========================================================================
 
 %==========================================================================
@@ -308,6 +318,14 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
         back_neighbor_label = horzcat(back_neighbor_label,label);     %concate the array of neighbor color of each segment
     end
 end
+
+for i = 0:maxValue                     %Assign original luminance value to segmented background image
+    [row,col] = find(regionMap == i);          %"luminance_back" means original luminance background image
+    luminance_back(regionMap == i) = back_crop(row(1),col(1));
+end
+
+figure;
+imshow(luminance_back);
 %==========================================================================
 %===============Graph Construction=====================
 %=================Standout Edges=======================
