@@ -32,12 +32,18 @@ valuesMin = [min(I(:)) thresh];
 
 I = imquantize(I,thresh,valuesMin);
 I = imcomplement(imfill(imcomplement(I),'holes'));
-
-
+%{
+for i = 1:x
+    for j = 1:y
+        if mask(i,j) == 0
+            I(i,j) = 255;
+        end
+    end
+end
+%}
+I(I == valuesMin(8)) = 255;
 I_crop = imcrop(I, [left bot (right-left) (top-bot)]);
 luminance = I_crop;
-%figure;
-%imshow(I_crop);
 %==========================================================================
 I_back = rgb2gray(imread('scn_1.bmp'));
 mask_back = rgb2gray(imread('scn_1(M).bmp'));
@@ -71,7 +77,16 @@ valuesMin = [min(I_back(:)) thresh];
 
 I_back = imquantize(I_back,thresh,valuesMin);
 I_back = imcomplement(imfill(imcomplement(I_back),'holes'));
-
+%{
+for i = 1:x
+    for j = 1:y
+        if mask_back(i,j) == 0
+            I_back(i,j) = 255;
+        end
+    end
+end
+%}
+I_back(I_back == valuesMin(8)) = 255;
 back_crop = imcrop(I_back, [left bot (right-left) (top-bot)]);
 
 [x,y] = size(back_crop);
@@ -95,8 +110,8 @@ bc_y = round(bc_y / cnt);
 [x,y] = size(I_crop);           %Combine Foreground and Background
 for i = 1:x
     for j = 1:y
-        if I_crop(i,j) < 220
-            back_crop((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = 255;  %Substitute with I_crop(i,j)
+        if I_crop(i,j) < 255
+            back_crop((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = 255;  %Substitute with 255
         end
     end
 end
@@ -105,121 +120,10 @@ luminance_back = back_crop;
 %figure;
 %imshow(back_crop);
 %==========================================================================
-%PROCESS FOR FORGROUND
-global regionMap;
-regionMap = zeros(size(I_crop));
-label = 1;
-step = 8;
-[x,y] = size(I_crop);
-i = step; j = step;
-
-%對整張影像灑種子
-for i = step:x
-    for j = step:y
-		if(I_crop(i,j) < 223 && regionMap(i,j) == 0)
-			regiongrowing(I_crop,i,j,label);
-			label = label + 1;
-        end
-        j = j + step;
-    end
-    i = i + step;
-    j = step;
-end
-
-M = max(regionMap);
-maxValue = max(M);
-%==========================================================================
-centroids = [];             %對RegionGrowing完的結果做處理
-                            %100 pixel以下的Segment用隔壁的pixel Color取代
-for i = 1:maxValue     
-    [row,col] = find(regionMap == i);
-    [index_x,index_y] = size(row);
-    if(index_x > 0 && index_x < 100)
-        if(col(1)-1 < 1)
-            intensity = regionMap(row(index_x),col(index_x)+1);
-        else
-            intensity = regionMap(row(1),col(1)-1);
-        end
-        regionMap(regionMap == i) = intensity;
-    end
-end
-%==========================================================================
-reLabel_cnt = 1;
-for i = 1:maxValue              %Relabeling
-    k = find(regionMap == i);
-    [x,y] = size(k);
-    if(x ~= 0)
-        regionMap(regionMap == i) = reLabel_cnt;
-        reLabel_cnt = reLabel_cnt + 1;
-    end
-end
-maxValue = reLabel_cnt - 1;     %New label of regionMap is from 1 to maxValue
-
-%{
-M = max(regionMap);
-maxValue = max(M);
-regionMap = round(regionMap / maxValue * 255);
-%}
-regionMap = uint8(regionMap);  %double 轉回 uint8
-%==========================================================================
-[re_row,re_col] = size(regionMap);   %size of regionMap
-neighbor = [-1 0; 1 0; 0 -1; 0 1];
-neighbor_label = [];
-
-for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座標
-    binaryMap = regionMap;
-    binaryMap(binaryMap ~= i) = 0;
-    binaryMap(binaryMap == i) = 255;
-    binaryMap = im2bw(binaryMap,graythresh(binaryMap));
-    %index = [i,0];
-    s = regionprops(binaryMap,'centroid');
-    centroids = [centroids ; cat(1, s.Centroid)];
-
-    [row,col] = find(binaryMap == 1);
-    boundary = bwboundaries(binaryMap);
-    label = zeros(maxValue,1,'uint8');
-
-    [seg_x,seg_y] = size(boundary);    %seg_x = the number of contour (some contour might have holes in it)
-    for seg_index = 1:seg_x
-        bound_point = boundary{seg_index};        %bound_point is the coordinate of all contour points
-        [bound_x,bound_y] = size(bound_point);    %bound_x = the number of contour points in the BOUNDARY
-        for j = 1:bound_x
-            for k = 1:4                           %check neighbor piexl in the region boundary
-                m = bound_point(j,1) + neighbor(k,1);
-                n = bound_point(j,2) + neighbor(k,2);
-                if(m == 0 || n == 0 || m > re_row || n > re_col)
-                    continue;
-                end
-                if(regionMap(m,n) ~= i && regionMap(m,n) ~= 0)         %record neighbor color
-                    label(regionMap(m,n)) = 1;
-                    break;
-                end
-            end
-            if(seg_index > 1)           %Holes in one segment only consider the first iteration (Assume only one segment in the hole)
-                break;
-            end
-        end
-    end
-    if(i==1)
-        neighbor_label = label;
-    else
-        neighbor_label = horzcat(neighbor_label,label);     %concate the array of neighbor color of each segment
-    end
-end
-
-fore_regionMap = regionMap;
-
-for i = 0:maxValue                     %Assign original luminance value to segmented foreground image
-    [row,col] = find(fore_regionMap == i);          %"luminance" means original luminance foreground image
-    luminance(fore_regionMap == i) = I_crop(row(1),col(1));
-end
-
-%figure;
-%imshow(luminance);
-%==========================================================================
 
 %==========================================================================
 %PROCESS FOR BACKGROUND
+global regionMap;
 regionMap = zeros(size(back_crop));
 label = 1;
 step = 8;
@@ -229,7 +133,7 @@ i = step; j = step;
 %對整張影像灑種子
 for i = step:x
     for j = step:y
-		if(back_crop(i,j) < 223 && regionMap(i,j) == 0)
+		if(back_crop(i,j) < 255 && regionMap(i,j) == 0)
 			regiongrowing(back_crop,i,j,label);
 			label = label + 1;
         end
@@ -247,7 +151,7 @@ back_centroids = [];             %對RegionGrowing完的結果做處理
 for i = 1:maxValue     
     [row,col] = find(regionMap == i);
     [index_x,index_y] = size(row);
-    if(index_x > 0 && index_x < 100)
+    if(index_x > 0 && index_x < 80)
         if(col(1)-1 < 1)
             intensity = regionMap(row(index_x),col(index_x)+1);
         else
@@ -273,37 +177,168 @@ M = max(regionMap);
 maxValue = max(M);
 regionMap = round(regionMap / maxValue * 255);
 %}
-regionMap = uint8(regionMap);  %double 轉回 uint8
+regionMap = uint16(regionMap);  %double 轉回 uint8
 %==========================================================================
 [re_row,re_col] = size(regionMap);   %size of regionMap
-back_neighbor_label = [];
+neighbor = [-1 0; 1 0; 0 -1; 0 1];
+back_seg_area = [];
+back_image_area = 0;
 
 for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座標
     binaryMap = regionMap;
     binaryMap(binaryMap ~= i) = 0;
     binaryMap(binaryMap == i) = 255;
     binaryMap = im2bw(binaryMap,graythresh(binaryMap));
-    %index = [i,0];
-    s = regionprops(binaryMap,'centroid');
+
+    s = regionprops(binaryMap,'centroid','area');
     back_centroids = [back_centroids ; cat(1, s.Centroid)];
+	back_seg_area = [back_seg_area;s.Area];
+	back_image_area = back_image_area + s.Area;
+end
+
+back_regionMap = regionMap;
+back_seg_num = maxValue;
+
+back_seg_lumminance = [];
+for i = 1:maxValue                     %Assign original luminance value to segmented background image
+    [row,col] = find(back_regionMap == i);          %"luminance_back" means original luminance background image
+    back_seg_lumminance = [back_seg_lumminance;back_crop(row(1),col(1))];
+end
+
+
+
+for i = 1:maxValue                             
+    luminance_back(back_regionMap == i) = back_seg_lumminance(i);
+end
+
+%figure;
+%imshow(luminance_back);
+back_maxValue = maxValue;
+%==========================================================================
+%PROCESS FOR FORGROUND
+regionMap = zeros(size(I_crop));
+label = 1;
+step = 8;
+[x,y] = size(I_crop);
+i = step; j = step;
+
+%對整張影像灑種子
+for i = step:x
+    for j = step:y
+		if(I_crop(i,j) < 255 && regionMap(i,j) == 0)
+			regiongrowing(I_crop,i,j,label);
+			label = label + 1;
+        end
+        j = j + step;
+    end
+    i = i + step;
+    j = step;
+end
+
+M = max(regionMap);
+maxValue = max(M);
+%==========================================================================
+centroids = [];             %對RegionGrowing完的結果做處理
+                            %100 pixel以下的Segment用隔壁的pixel Color取代               
+for i = 1:maxValue     
+    [row,col] = find(regionMap == i);
+    [index_x,index_y] = size(row);
+    if(index_x > 0 && index_x < 70)
+        if(col(1)-1 < 1 || I_crop(row(1),col(1)-1) == 255)
+            intensity = regionMap(row(index_x),col(index_x)+1);
+        else
+            intensity = regionMap(row(1),col(1)-1);
+        end
+        regionMap(regionMap == i) = intensity;
+    end
+end
+%==========================================================================
+reLabel_cnt = 1;
+for i = 1:maxValue              %Relabeling
+    k = find(regionMap == i);
+    [x,y] = size(k);
+    if(x ~= 0)
+        regionMap(regionMap == i) = reLabel_cnt;
+        reLabel_cnt = reLabel_cnt + 1;
+    end
+end
+maxValue = reLabel_cnt - 1;     %New label of regionMap is from 1 to maxValue
+
+%{
+M = max(regionMap);
+maxValue = max(M);
+regionMap = round(regionMap / maxValue * 255);
+%}
+regionMap = uint16(regionMap);  %double 轉回 uint8
+%==========================================================================
+[re_row,re_col] = size(regionMap);   %size of regionMap
+[back_x back_y] = size(back_regionMap);
+neighbor_label = [];
+
+%input for optimization
+fore_seg_length = [];
+fore_seg_area = [];
+stdout_shared_length = [];
+immers_shared_length = [];
+fore_image_area = 0;
+
+for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座標
+    binaryMap = regionMap;
+    binaryMap(binaryMap ~= i) = 0;
+    binaryMap(binaryMap == i) = 255;
+    binaryMap = im2bw(binaryMap,graythresh(binaryMap));
+
+    s = regionprops(binaryMap,'centroid','area');
+    centroids = [centroids ; cat(1, s.Centroid)];
+	fore_seg_area = [fore_seg_area;s.Area];
+	fore_image_area = fore_image_area + s.Area;
 
     [row,col] = find(binaryMap == 1);
     boundary = bwboundaries(binaryMap);
+    
     label = zeros(maxValue,1,'uint8');
+    std_shared_length = zeros(maxValue,1,'uint16');
+	imm_shared_length = zeros(back_maxValue,1,'uint16');
 
     [seg_x,seg_y] = size(boundary);    %seg_x = the number of contour (some contour might have holes in it)
     for seg_index = 1:seg_x
         bound_point = boundary{seg_index};        %bound_point is the coordinate of all contour points
         [bound_x,bound_y] = size(bound_point);    %bound_x = the number of contour points in the BOUNDARY
+        if (seg_index == 1)
+			fore_seg_length = [fore_seg_length;bound_x];
+		end
         for j = 1:bound_x
             for k = 1:4                           %check neighbor piexl in the region boundary
-                m = bound_point(j,1) + neighbor(k,1);
+                m = bound_point(j,1) + neighbor(k,1);   
                 n = bound_point(j,2) + neighbor(k,2);
-                if(m == 0 || n == 0 || m > re_row || n > re_col)
-                    continue;
+				s = m + (bc_x-round(re_col/2));   
+				t = n + (bc_y-round(re_row/2));
+                if( m == 0 || n == 0 || m > re_row || n > re_col) 		%outside foreground image
+					if ( s == 0 || t == 0 || s > back_x || t > back_y)	%outside background image
+						continue;
+					else												
+						if (back_regionMap(s,t) ~= 0)	%if inside the background contour,add 1 to the shared length
+							imm_shared_length(back_regionMap(s,t)) = imm_shared_length(back_regionMap(s,t)) + 1;
+							%temp1 = [temp1;s t];
+							break;
+						end
+					end
+					continue;
                 end
-                if(regionMap(m,n) ~= i && regionMap(m,n) ~= 0)         %record neighbor color
+				if (regionMap(m,n) == 0)
+					if (back_regionMap(s,t) ~= 0)
+						imm_shared_length(back_regionMap(s,t)) = imm_shared_length(back_regionMap(s,t)) + 1;
+						%temp1 = [temp1;s t];
+						break;
+					end
+				end
+                if((regionMap(m,n) ~= i) && (regionMap(m,n) ~= 0))         %record neighbor color
                     label(regionMap(m,n)) = 1;
+					if(seg_index > 1)								%holes shared length = the number of contour points
+						std_shared_length(regionMap(m,n)) = bound_x;
+					else
+						std_shared_length(regionMap(m,n)) = std_shared_length(regionMap(m,n)) + 1;
+					end
                     break;
                 end
             end
@@ -313,19 +348,32 @@ for i = 1:maxValue              %對每個Segment做二值化，在對二值化影像找中心點座
         end
     end
     if(i==1)
-        back_neighbor_label = label;
+        neighbor_label = label;
+		stdout_shared_length = std_shared_length;
+		immers_shared_length = imm_shared_length;
     else
-        back_neighbor_label = horzcat(back_neighbor_label,label);     %concate the array of neighbor color of each segment
+        neighbor_label = horzcat(neighbor_label,label);     %concate the array of neighbor color of each segment
+		stdout_shared_length = horzcat(stdout_shared_length,std_shared_length);
+		immers_shared_length = horzcat(immers_shared_length,imm_shared_length);
     end
 end
 
-for i = 0:maxValue                     %Assign original luminance value to segmented background image
-    [row,col] = find(regionMap == i);          %"luminance_back" means original luminance background image
-    luminance_back(regionMap == i) = back_crop(row(1),col(1));
+fore_regionMap = uint8(regionMap);
+%imshow(fore_regionMap);
+fore_seg_num = maxValue;
+
+fore_seg_lumminance = [];
+for i = 1:maxValue                     %Assign original luminance value to segmented foreground image
+    [row,col] = find(fore_regionMap == i);          %"luminance" means original luminance foreground image
+    fore_seg_lumminance = [fore_seg_lumminance;I_crop(row(1),col(1))];
 end
 
-figure;
-imshow(luminance_back);
+for i = 1:maxValue                             
+    luminance(fore_regionMap == i) = fore_seg_lumminance(i);
+end
+
+%figure;
+%imshow(luminance);
 %==========================================================================
 %===============Graph Construction=====================
 %=================Standout Edges=======================
@@ -385,7 +433,7 @@ imshow(fore_regionMap);
 hold on
 plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids 
 hold off
-%}
+
 
 figure;
 imshow(regionMap);
@@ -406,7 +454,142 @@ for i = 1:dim(1)
 end
 
 hold off
+%}
 %==========================================================================
+%===================Immersion energy(Data cost)============================
+datacost = zeros(back_seg_num , fore_seg_num);
+immersion_weight = zeros(fore_seg_num , 3);
+
+for i = 1:fore_seg_num
+	for j = 1:back_seg_num
+		cost = 0;
+		for k = 1:knn
+			length = graph.get(i-1).size();
+			k_neighbor = graph.get(i-1).get(length-knn+k-1);	%k_neighbor is the kth neighbor of ith foreground segment
+			if (immers_shared_length(k_neighbor,i) == 0)
+				a = [centroids(i,1) centroids(i,2)];
+				b = [back_centroids(k_neighbor,1) back_centroids(k_neighbor,2)];
+				imm_weight = (back_seg_area(k_neighbor)/back_image_area) * exp(-norm(a-b)/0.1);
+			else
+				imm_weight = (double(immers_shared_length(k_neighbor,i))/double(fore_seg_length(i)))*(back_seg_area(k_neighbor)/back_image_area);
+			end
+			power_result = double(back_seg_lumminance(j) - back_seg_lumminance(k_neighbor));
+			power_result = power_result.^2;
+			cost = cost + power_result * imm_weight;
+            immersion_weight(i , k) = imm_weight;
+		end
+		datacost(j,i) = cost;
+	end
+end
+
+
+smooth_weight = zeros(fore_seg_num,fore_seg_num);
+
+for i = 1:fore_seg_num
+	for j = 1:fore_seg_num
+		smooth_weight(i,j) = ((double(stdout_shared_length(i,j)))/double(fore_seg_length(i)) * (fore_seg_area(i)/fore_image_area) + (double(stdout_shared_length(j,i)))/double(fore_seg_length(j)) * (fore_seg_area(j)/fore_image_area))/2;
+	end
+end
+
+%smooth_weight = smooth_weight;
+
+fore_seg_lumminance_diff = 0;
+std_edge_cnt = 0;
+
+%datacost = datacost;
+fore_seg_lumminance_diff = fore_seg_lumminance_diff / std_edge_cnt;
+%==========================================================================
+%===================Standout energy(Smooth cost)===========================
+smooth_cost = zeros(back_seg_num,back_seg_num);
+%smooth_weight = zeros(fore_seg_num,fore_seg_num);
+
+fore_luminance_diff = zeros(fore_seg_num,fore_seg_num);
+%{
+for i = 1:back_seg_num
+	for j = 1:back_seg_num
+		diff = double(back_seg_lumminance(i)) - double(back_seg_lumminance(j));
+		smooth_cost(i,j) = diff;
+	end
+end
+%}
+for i = 1:fore_seg_num
+	for j = 1:fore_seg_num
+		if (smooth_weight(i,j) ~= 0)
+				fore_luminance_diff(i,j) = double(fore_seg_lumminance(i))- double(fore_seg_lumminance(j));
+		end
+	end
+end
+
+%smooth_cost = smooth_cost.^2;
+%==========================================================================
+%======================Luminance Optimaization=============================
+%Solve AX = B, linear least square
+immersion_weight = normr(immersion_weight);
+smooth_weight = normr(smooth_weight);
+
+A_row_size = knn*fore_seg_num + fore_seg_num.^2 - fore_seg_num;
+A = zeros(A_row_size, fore_seg_num);
+B = zeros(A_row_size, 1);
+for i = 1:fore_seg_num
+    A((i-1)*knn+1,i) = immersion_weight(i,1);
+    A((i-1)*knn+2,i) = immersion_weight(i,2);
+    A((i-1)*knn+3,i) = immersion_weight(i,3);
+    
+    length = graph.get(i-1).size();
+    B((i-1)*knn+1,1) = immersion_weight(i,1) * back_seg_lumminance(graph.get(i-1).get(length-knn+0));
+    B((i-1)*knn+2,1) = immersion_weight(i,2) * back_seg_lumminance(graph.get(i-1).get(length-knn+1));
+    B((i-1)*knn+3,1) = immersion_weight(i,3) * back_seg_lumminance(graph.get(i-1).get(length-knn+2));
+end
+
+for i = (knn*fore_seg_num+1):A_row_size
+    for j = 1:fore_seg_num
+        for k = 1:fore_seg_num
+            if(j ~= k)
+                A(i,j) = smooth_weight(j,k);
+                A(i,k) = -smooth_weight(j,k);
+                
+                B(i,1) = fore_luminance_diff(j,k) * smooth_weight(j,k);
+            end
+        end
+    end
+end
+X = lsqnonneg(A,B);
+X = uint8(X);
+
+opti_luminance = zeros(size(luminance));
+opti_luminance(fore_regionMap == 0) = 255;
+for i = 1:fore_seg_num
+    opti_luminance(fore_regionMap == i) = X(i);
+end
+opti_luminance = uint8(opti_luminance);
+%figure;
+%imshow(opti_luminance);
+
+
+[x,y] = size(opti_luminance);           %Combine Foreground and Background
+for i = 1:x
+    for j = 1:y
+        if opti_luminance(i,j) < 255
+            luminance_back((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = opti_luminance(i,j);  %Substitute with I_crop(i,j)
+       
+        else
+            if(luminance_back((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) == 255 && (bc_y-round(x/2))+j < bc_y)
+                luminance_back((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = luminance_back((bc_x-round(y/2))+i,(bc_y-round(x/2))+j-10);
+            end
+           
+        end
+    end
+end
+
+figure;
+imshow(luminance_back);
+
+
+
+
+
+
+
 
 
 
