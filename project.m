@@ -49,6 +49,7 @@ I_crop = imcrop(I, [left bot (right-left) (top-bot)]);
 luminance = I_crop;
 %==========================================================================
 I_back = rgb2gray(imread('scn_1.bmp'));
+I_back_color = imread('scn_1.bmp');
 mask_back = rgb2gray(imread('scn_1(M).bmp'));
 
 top = -1; bot = 1000; left = 1000; right = -1;
@@ -58,6 +59,7 @@ for i = 1:x
     for j = 1:y
         if mask_back(i,j) ~= 255
             I_back(i,j) = 255;
+            I_back_color(i,j,:) = 255;
         else
             if top < i
                 top = i;
@@ -92,7 +94,7 @@ end
 %}
 I_back(I_back == valuesMin(quant_num + 1)) = 255;
 back_crop = imcrop(I_back, [left bot (right-left) (top-bot)]);
-
+I_back_color = imcrop(I_back_color, [left bot (right-left) (top-bot)]);
 [x,y] = size(back_crop);
 for i = 1:x
     for j = 1:y
@@ -111,18 +113,22 @@ bc_y = round(bc_y / cnt);
 %imshow(back_crop);
 %rectangle('Position', [bc_x bc_y 1 1], 'LineWidth',2, 'EdgeColor','b');
 %==========================================================================
+
 [x,y] = size(I_crop);           %Combine Foreground and Background
+Texture = zeros(x,y,3);
+Texture(Texture == 0) = 255;
 for i = 1:x
     for j = 1:y
         if I_crop(i,j) < 255
+            Texture(i,j,:) = I_back_color((bc_x-round(y/2))+i,(bc_y-round(x/2))+j,:);
             back_crop((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = 255;  %Substitute with 255
         end
     end
 end
 
 luminance_back = back_crop;
-%figure;
-%imshow(back_crop);
+figure;
+imshow(uint8(Texture));
 %==========================================================================
 
 %==========================================================================
@@ -218,6 +224,7 @@ end
 %figure;
 %imshow(luminance_back);
 back_maxValue = maxValue;
+luminance_back_org = luminance_back;
 %==========================================================================
 %PROCESS FOR FORGROUND
 regionMap = zeros(size(I_crop));
@@ -623,6 +630,8 @@ end
 figure;
 imshow(luminance_back);
 %imwrite(luminance_back,'opti_result.png');
+
+synthesis((bc_y-round(x/2)),(bc_x-round(y/2)) , luminance_back_org, I_back_color,opti_luminance ,Texture);
 
 
 
