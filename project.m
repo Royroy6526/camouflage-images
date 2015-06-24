@@ -1,4 +1,6 @@
 close all;
+
+quant_num = 7;
 I = rgb2gray(imread('lion3.bmp'));
 I = imresize(I, 0.5);
 mask = rgb2gray(imread('lion3(M).bmp'));
@@ -27,11 +29,12 @@ for i = 1:x
     end
 end
 
-thresh = multithresh(I,7);
+thresh = multithresh(I,quant_num);
 valuesMin = [min(I(:)) thresh];
 
 I = imquantize(I,thresh,valuesMin);
 I = imcomplement(imfill(imcomplement(I),'holes'));
+
 %{
 for i = 1:x
     for j = 1:y
@@ -41,7 +44,7 @@ for i = 1:x
     end
 end
 %}
-I(I == valuesMin(8)) = 255;
+I(I == valuesMin(quant_num + 1)) = 255;
 I_crop = imcrop(I, [left bot (right-left) (top-bot)]);
 luminance = I_crop;
 %==========================================================================
@@ -72,11 +75,12 @@ for i = 1:x
     end
 end
 
-thresh = multithresh(I_back,7);
+thresh = multithresh(I_back,quant_num);
 valuesMin = [min(I_back(:)) thresh];
 
 I_back = imquantize(I_back,thresh,valuesMin);
 I_back = imcomplement(imfill(imcomplement(I_back),'holes'));
+
 %{
 for i = 1:x
     for j = 1:y
@@ -86,7 +90,7 @@ for i = 1:x
     end
 end
 %}
-I_back(I_back == valuesMin(8)) = 255;
+I_back(I_back == valuesMin(quant_num + 1)) = 255;
 back_crop = imcrop(I_back, [left bot (right-left) (top-bot)]);
 
 [x,y] = size(back_crop);
@@ -435,10 +439,19 @@ plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids
 hold off
 
 
+[x,y] = size(I_crop);           %Combine Foreground and Background
+for i = 1:x
+    for j = 1:y
+        if I_crop(i,j) < 255
+            luminance_back((bc_x-round(y/2))+i,(bc_y-round(x/2))+j) = luminance(i,j);  %Substitute with 255
+        end
+    end
+end
+
 figure;
-imshow(regionMap);
+imshow(luminance_back);
 hold on
-plot(centroids(:,1),centroids(:,2), 'g*')     %Draw Segments Centroids 
+plot(centroids(:,1),centroids(:,2), 'b*')     %Draw Segments Centroids 
 plot(back_centroids(:,1),back_centroids(:,2), 'ro')     %Draw Segments Centroids 
 dim = size(centroids);
 
@@ -446,14 +459,19 @@ dim = size(centroids);
 for i = 1:dim(1)
     length = graph.get(i-1).size();
     for j = 1:length-knn          %foreground
-        plot([centroids(i,1),centroids(graph.get(i-1).get(j-1),1)], [centroids(i,2),centroids(graph.get(i-1).get(j-1),2)], 'g');
+        plot([centroids(i,1),centroids(graph.get(i-1).get(j-1),1)], [centroids(i,2),centroids(graph.get(i-1).get(j-1),2)], 'b');
     end
     for k = 1:knn                 %background
-        plot([centroids(i,1),back_centroids(graph.get(i-1).get(j+k-1),1)], [centroids(i,2),back_centroids(graph.get(i-1).get(j+k-1),2)], 'r');
+        plot([centroids(i,1),back_centroids(graph.get(i-1).get(j+k-1),1)], [centroids(i,2),back_centroids(graph.get(i-1).get(j+k-1),2)], 'y');
     end
 end
 
 hold off
+
+fore_regionMap(fore_regionMap == 28) = 255;
+fore_regionMap(fore_regionMap == 34) = 255;
+figure;
+imshow(uint8(fore_regionMap));
 %}
 %==========================================================================
 %===================Immersion energy(Data cost)============================
@@ -490,14 +508,6 @@ for i = 1:fore_seg_num
 		smooth_weight(i,j) = ((double(stdout_shared_length(i,j)))/double(fore_seg_length(i)) * (fore_seg_area(i)/fore_image_area) + (double(stdout_shared_length(j,i)))/double(fore_seg_length(j)) * (fore_seg_area(j)/fore_image_area))/2;
 	end
 end
-
-%smooth_weight = smooth_weight;
-
-fore_seg_lumminance_diff = 0;
-std_edge_cnt = 0;
-
-%datacost = datacost;
-fore_seg_lumminance_diff = fore_seg_lumminance_diff / std_edge_cnt;
 %==========================================================================
 %===================Standout energy(Smooth cost)===========================
 smooth_cost = zeros(back_seg_num,back_seg_num);
@@ -525,7 +535,10 @@ end
 %======================Luminance Optimaization=============================
 %Solve AX = B, linear least square
 immersion_weight = normr(immersion_weight);
-smooth_weight = normr(smooth_weight);
+%smooth_weight = normr(smooth_weight);
+
+immersion_weight = immersion_weight * 0.5;
+smooth_weight = smooth_weight * 2;
 
 A_row_size = knn*fore_seg_num + fore_seg_num.^2 - fore_seg_num;
 A = zeros(A_row_size, fore_seg_num);
@@ -553,8 +566,33 @@ for i = (knn*fore_seg_num+1):A_row_size
         end
     end
 end
+
+fore_seg_characteristic = zeros(fore_seg_num , 1);
+for i = 1:fore_seg_num
+   for j = 1: fore_seg_num
+      if (j > i)
+          fore_seg_characteristic(i) =  fore_seg_characteristic(i) + abs(fore_luminance_diff(i,j));
+          fore_seg_characteristic(j) =  fore_seg_characteristic(j) + abs(fore_luminance_diff(i,j));
+      end
+   end
+end
+
+for i = 1:fore_seg_num
+    fore_seg_characteristic(i) = double(fore_seg_characteristic(i))/fore_seg_area(i);
+end
+characteristic_index = [];
+for i = 1:3
+    [value,index] = max(fore_seg_characteristic);
+    fore_seg_characteristic(index) = 0;
+    characteristic_index = [characteristic_index;index];
+end
+
 X = lsqnonneg(A,B);
 X = uint8(X);
+
+for i = 1:3
+   X(characteristic_index(i)) = fore_seg_lumminance(characteristic_index(i));
+end
 
 opti_luminance = zeros(size(luminance));
 opti_luminance(fore_regionMap == 0) = 255;
@@ -563,7 +601,8 @@ for i = 1:fore_seg_num
 end
 opti_luminance = uint8(opti_luminance);
 %figure;
-%imshow(opti_luminance);
+%imwrite(opti_luminance,'opti_luminance.png');
+
 
 
 [x,y] = size(opti_luminance);           %Combine Foreground and Background
@@ -583,6 +622,7 @@ end
 
 figure;
 imshow(luminance_back);
+%imwrite(luminance_back,'opti_result.png');
 
 
 
